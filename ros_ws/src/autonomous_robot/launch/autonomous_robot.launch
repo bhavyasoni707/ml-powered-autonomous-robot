@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Model argument, defaults to TURTLEBOT3_MODEL env var -->
+  <arg name="model" default="$(env TURTLEBOT3_MODEL)" />
+
+  <!-- Launch TurtleBot3 Gazebo world -->
+  <include file="$(find turtlebot3_gazebo)/launch/turtlebot3_world.launch">
+    <arg name="model" value="$(arg model)" />
+  </include>
+
+  <!-- Robot state publisher to fix missing base_scan TF frame -->
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
+    <param name="publish_frequency" value="50.0" />
+  </node>
+</launch>

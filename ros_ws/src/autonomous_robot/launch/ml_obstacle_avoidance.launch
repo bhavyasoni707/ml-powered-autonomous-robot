@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Sensor processing node -->
+  <node pkg="autonomous_robot" type="sensor_processor.py" name="sensor_processor" output="screen">
+    <rosparam command="load" file="$(find autonomous_robot)/config/robot_params.yaml" />
+  </node>
+
+  <!-- ML prediction node -->
+  <node pkg="autonomous_robot" type="ml_predictor.py" name="ml_predictor" output="screen">
+    <rosparam command="load" file="$(find autonomous_robot)/config/robot_params.yaml" />
+  </node>
+
+  <!-- Robot controller node -->
+  <node pkg="autonomous_robot" type="robot_controller.py" name="robot_controller" output="screen">
+    <rosparam command="load" file="$(find autonomous_robot)/config/robot_params.yaml" />
+  </node>
+</launch>

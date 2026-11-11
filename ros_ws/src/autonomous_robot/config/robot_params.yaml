@@ -1,0 +1,13 @@
+# Sensor processing
+num_readings: 360
+safe_max: 3.5
+
+# Data collection / teacher policy
+front_threshold: 0.5
+side_threshold: 0.35
+linear_speed: 0.15
+angular_speed: 0.8
+
+# Safety layer
+emergency_distance: 0.2
+control_rate: 10

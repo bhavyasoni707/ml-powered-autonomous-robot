@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Sensor processing node -->
+  <node pkg="autonomous_robot" type="sensor_processor.py" name="sensor_processor" output="screen">
+    <rosparam command="load" file="$(find autonomous_robot)/config/robot_params.yaml" />
+  </node>
+
+  <!-- Data collection node -->
+  <node pkg="autonomous_robot" type="data_collector.py" name="data_collector" output="screen">
+    <rosparam command="load" file="$(find autonomous_robot)/config/robot_params.yaml" />
+  </node>
+</launch>

@@ -57,6 +57,7 @@ TURTLEBOT3_MODEL=burger
 
 ## Repository Structure
 
+```
 ml-powered-autonomous-robot/
 ├── README.md
 ├── .gitignore
@@ -64,11 +65,30 @@ ml-powered-autonomous-robot/
     └── src/
         └── autonomous_robot/
             ├── package.xml
-            └── CMakeLists.txt
+            ├── CMakeLists.txt
+            ├── config/
+            │   └── robot_params.yaml
+            ├── launch/
+            │   ├── autonomous_robot.launch
+            │   ├── data_collection.launch
+            │   └── ml_obstacle_avoidance.launch
+            ├── scripts/
+            │   ├── sensor_processor.py
+            │   ├── data_collector.py
+            │   ├── train_model.py
+            │   ├── ml_predictor.py
+            │   └── robot_controller.py
+            ├── data/
+            │   └── .gitkeep
+            └── models/
+                └── .gitkeep
+```
 
 The ROS package was created with:
 
+```bash
 catkin_create_pkg autonomous_robot rospy std_msgs sensor_msgs geometry_msgs
+```
 
 ## Completed Work
 
@@ -78,71 +98,92 @@ catkin_create_pkg autonomous_robot rospy std_msgs sensor_msgs geometry_msgs
 4. Created the ROS Catkin workspace at ros_ws/.
 5. Built the Catkin workspace successfully using catkin_make.
 6. Created the autonomous_robot ROS package.
-7. Verified the package using rospack find autonomous_robot.
+7. Verified the package using `rospack find autonomous_robot`.
 8. Installed TurtleBot3 and its simulation packages.
 9. Successfully launched TurtleBot3 Burger in Gazebo Classic.
-10. Inspected ROS topics and confirmed:
-    - /scan
-    - /cmd_vel
-    - /odom
-    - /tf
-11. Confirmed /scan publishes sensor_msgs/LaserScan.
-12. Inspected LiDAR readings:
-    - approximately 360 readings
-    - angle_min approximately 0 radians
-    - angle_max approximately 2*pi radians
-    - angle_increment approximately 0.0175 radians
-    - range_min 0.12 m
-    - range_max 3.5 m
-    - infinity values occur when no valid obstacle return is detected.
-13. Confirmed LiDAR frame_id is base_scan.
-14. Confirmed /robot_description parameter exists.
-15. Confirmed robot_state_publisher is installed.
+10. Inspected ROS topics and confirmed `/scan`, `/cmd_vel`, `/odom`, `/tf`.
+11. Confirmed `/scan` publishes `sensor_msgs/LaserScan`.
+12. Inspected LiDAR readings (360 readings, 0.12 - 3.5 m range, frame_id `base_scan`).
+13. Confirmed LiDAR frame_id is `base_scan`.
+14. Confirmed `/robot_description` parameter exists.
+15. Confirmed `robot_state_publisher` is installed.
+16. **Resolved TF Frame issue**: Created `autonomous_robot.launch` combining Gazebo simulation with `robot_state_publisher` to publish `/tf_static` transforms. Verified `base_link` -> `base_scan` transform via `tf_echo`.
+17. Created configuration parameter file `config/robot_params.yaml`.
+18. Implemented `sensor_processor.py` to extract 5-sector minimum distances (`front`, `front_left`, `front_right`, `left`, `right`) and publish to `/scan_features`.
+19. Implemented `data_collector.py` with rule-based teacher policy to drive the robot and log labeled CSV dataset to `data/training_data.csv`.
+20. Implemented `train_model.py` standalone script to train a `RandomForestClassifier` on collected data, evaluate accuracy and confusion matrix, and save to `models/obstacle_avoidance_model.joblib`.
+21. Implemented `ml_predictor.py` to load trained model and publish real-time action predictions to `/ml_action`.
+22. Implemented `robot_controller.py` with an independent emergency stop safety layer that overrides ML commands when obstacles are closer than `emergency_distance` (0.2 m).
+23. Created `data_collection.launch` and `ml_obstacle_avoidance.launch`.
+24. Configured `CMakeLists.txt` with `catkin_install_python` and verified workspace build.
 
-## Current Issue: TF Frames
+## TF Frame Issue: Resolved
 
-The expected sensor transform is not currently available.
+The `base_scan` frame is defined in the TurtleBot3 URDF as a fixed joint child of `base_link`.
+The standard `turtlebot3_world.launch` did not start `robot_state_publisher`, so only `odom -> base_footprint` was broadcast.
 
-Observed:
-- /tf publishes odom -> base_footprint.
-- base_scan was not found by tf_echo.
-- /tf_static was not present in the observed topic list.
-- rosnode list showed /gazebo, /gazebo_gui and /rosout.
-- robot_state_publisher was not running.
-- /robot_description exists.
+**Resolution:**
+The project master launch file `autonomous_robot.launch` includes both `turtlebot3_world.launch` and launches `robot_state_publisher` at 50 Hz. This publishes all static transforms from `/robot_description` to `/tf_static`, establishing the full transform chain:
+`odom -> base_footprint -> base_link -> base_scan`
 
-The TurtleBot3 launch file was inspected:
+Verified with:
+```bash
+rosrun tf tf_echo base_link base_scan
+```
+Result: Translation `[-0.032, 0.000, 0.172]`, Rotation `[0.000, 0.000, 0.000, 1.000]`.
 
-/opt/ros/noetic/share/turtlebot3_gazebo/launch/turtlebot3_world.launch
+## How to Run the System
 
-It:
-1. Starts Gazebo.
-2. Loads the TurtleBot3 URDF into /robot_description.
-3. Spawns the robot using gazebo_ros/spawn_model.
+### 1. Build and Source the Workspace
 
-It does NOT start robot_state_publisher.
+```bash
+cd ~/ml-powered-autonomous-robot/ros_ws
+source /opt/ros/noetic/setup.bash
+catkin_make
+source devel/setup.bash
+```
 
-The robot_state_publisher package exists at:
+### 2. Launch Simulation (Gazebo + TF Publisher)
 
-/opt/ros/noetic/share/robot_state_publisher
+In Terminal 1:
+```bash
+export TURTLEBOT3_MODEL=burger
+source ~/ml-powered-autonomous-robot/ros_ws/devel/setup.bash
+roslaunch autonomous_robot autonomous_robot.launch
+```
 
-Do not modify files inside /opt/ros/noetic/.
-Prefer adding the required configuration to this project's own launch files.
+### 3. Step A: Collect Training Data (Teacher Policy)
 
-## Immediate Next Tasks
+In Terminal 2:
+```bash
+source ~/ml-powered-autonomous-robot/ros_ws/devel/setup.bash
+roslaunch autonomous_robot data_collection.launch
+```
+Let the robot explore the environment and accumulate samples (logged every 100 samples). Stop with `Ctrl+C` when sufficient data (e.g., 500-1500 samples) has been collected. Data is saved in:
+`ros_ws/src/autonomous_robot/data/training_data.csv`
 
-1. Diagnose the missing TF transforms.
-2. Add robot_state_publisher to the project's launch configuration correctly.
-3. Verify that base_scan becomes available through TF.
-4. Create the project launch directory and launch file.
-5. Create sensor_processor.py to subscribe to /scan.
-6. Extract useful LiDAR features such as front, left and right obstacle distances.
-7. Collect labeled training data using a rule-based teacher policy.
-8. Train a RandomForestClassifier.
-9. Evaluate the model using a test set and confusion matrix.
-10. Create ml_predictor.py to load the trained model and predict actions.
-11. Create robot_controller.py to publish velocity commands to /cmd_vel.
-12. Test obstacle avoidance in Gazebo.
+### 4. Step B: Train the Machine Learning Model
+
+In Terminal 2 (after stopping data collection):
+```bash
+python3 ~/ml-powered-autonomous-robot/ros_ws/src/autonomous_robot/scripts/train_model.py
+```
+This script will:
+- Display sample count and class distribution
+- Split data 80/20 train/test (stratified)
+- Train a `RandomForestClassifier` (100 trees)
+- Print test set accuracy, classification report, and confusion matrix
+- Print feature importances
+- Save the trained model to `ros_ws/src/autonomous_robot/models/obstacle_avoidance_model.joblib`
+
+### 5. Step C: Run Autonomous ML Obstacle Avoidance
+
+In Terminal 2:
+```bash
+source ~/ml-powered-autonomous-robot/ros_ws/devel/setup.bash
+roslaunch autonomous_robot ml_obstacle_avoidance.launch
+```
+The robot will now navigate autonomously using real-time predictions from the trained model, guarded by the independent safety layer.
 
 ## Planned Architecture
 
