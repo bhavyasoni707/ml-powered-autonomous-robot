@@ -1,0 +1,7 @@
+ros_ws/build/
+ros_ws/devel/
+ros_ws/log/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.bag
